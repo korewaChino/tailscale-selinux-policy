@@ -12,6 +12,20 @@ policy_module(tailscaled, 1.0.0)
 gen_require(`
 	type devpts_t;
 	type sshd_key_t;
+    type systemd_systemctl_exec_t;
+    type sysctl_fs_t;
+    type net_conf_t;
+    type binfmt_misc_fs_t;
+    type etc_t;
+    type node_t;
+    type tailscaled_t;
+    class dir { search watch };
+    class file { create execute rename write };
+    class netlink_netfilter_socket { bind create getattr getopt };
+    class capability { net_bind_service net_raw sys_ptrace };
+    class capability2 bpf;
+    class process setpgid;
+    class rawip_socket node_bind;
 ')
 
 ########################################
@@ -78,6 +92,14 @@ allow tailscaled_t self:capability { setgid };
 # Allow tailscaled_t capabilities required when login is setup after SSH and before shell is spawned
 allow tailscaled_t self:capability { setuid chown fowner fsetid };
 
+# Allow tailscaled_t to set the process group ID. Required when login is setup after SSH
+allow tailscaled_t self:process setpgid;
+# Allow tailscaled_t to set its own process's resource limits.
+allow tailscaled_t self:process setrlimit;
+# Allow tailscaled_t to write temporary files
+allow tailscaled_t wtmp_t:file write;
+
+
 # Section 2 - Ends here
 
 # Section 3 - Starts here
@@ -140,12 +162,33 @@ corenet_rw_tun_tap_dev(tailscaled_t)
 # These rules are part of wireguard as well. Ref - wireguard.te
 allow tailscaled_t self:netlink_generic_socket create_socket_perms;
 allow tailscaled_t self:netlink_route_socket create_netlink_socket_perms;
+allow tailscaled_t self:netlink_netfilter_socket { bind create getattr getopt };
 
 # Allow tailscale daemon to create different types of sockets
 allow tailscaled_t self:tcp_socket create_stream_socket_perms;
 allow tailscaled_t self:udp_socket create_socket_perms;
 allow tailscaled_t self:unix_dgram_socket create_socket_perms;
 allow tailscaled_t self:rawip_socket create_socket_perms;
+
+
+allow tailscaled_t binfmt_misc_fs_t:dir search;
+
+allow tailscaled_t etc_t:dir watch;
+
+
+allow tailscaled_t etc_t:file { create rename write };
+
+
+allow tailscaled_t net_conf_t:file rename;
+
+
+allow tailscaled_t node_t:rawip_socket node_bind;
+
+# Allow tailscaled_t to bind to scan sysfs
+allow tailscaled_t sysctl_fs_t:dir search;
+
+allow tailscaled_t self:capability2 bpf;
+
 
 # Allow tailscaled_t to bind to generic TCP ports - defined in kernel/corenetwork.if
 corenet_tcp_bind_generic_port(tailscaled_t)
